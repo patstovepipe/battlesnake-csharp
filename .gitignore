@@ -17,6 +17,9 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# NuGet packages folder which will be restored on build
+packages/
+
 # =========================
 # Operating System Files
 # =========================
