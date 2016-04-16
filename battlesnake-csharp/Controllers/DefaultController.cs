@@ -12,7 +12,7 @@ namespace battlesnake_csharp.Controllers
     {
         public class Game : Start
         {
-            public int turn { get; set; }
+            public int? turn { get; set; }
 
             public string snake { get; set; }
 
@@ -38,7 +38,7 @@ namespace battlesnake_csharp.Controllers
             public string game_id { get; set; }
             public List<Snake> snakes { get; set; }
             public List<List<BoardTile>> board { get; set; }
-            public int turn { get; set; }
+            public int? turn { get; set; }
         }
 
         public class BoardTile
@@ -94,10 +94,12 @@ namespace battlesnake_csharp.Controllers
         public HttpResponseMessage move(object data)
         {
             var reqmove = JsonConvert.DeserializeObject<Move>(data.ToString());
-            game.turn = reqmove.turn;
+
+            if (reqmove.turn != null && game != null)
+                game.turn = reqmove.turn;
 
             var move = GetMove(reqmove);
-            var taunt = taunts.ElementAt(rnd.Next(taunts.Count() - 1));
+            var taunt = taunts.ElementAt(rnd.Next(0, taunts.Count() - 1));
 
             return Request.CreateResponse(HttpStatusCode.OK, new { move = move, taunt = taunt });
         }
