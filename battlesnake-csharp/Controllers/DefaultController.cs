@@ -5,6 +5,9 @@ using System.Net;
 using System.Net.Http;
 using System.Web.Http;
 using System.Linq;
+using MongoDB.Driver;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 
 namespace battlesnake_csharp.Controllers
 {
@@ -12,17 +15,9 @@ namespace battlesnake_csharp.Controllers
     {
         public class Game : Start
         {
-            public int? turn { get; set; }
-
             public string snake { get; set; }
 
-            public bool topleftMovement { get; set; }
-
-            public Game()
-            {
-                this.turn = 0;
-                this.topleftMovement = true;
-            }
+            public bool topleftmovement { get; set; }
         }
 
         public class Start
@@ -57,7 +52,11 @@ namespace battlesnake_csharp.Controllers
             public string taunt { get; set; }
         }
 
-        public static Game game { get; set; }
+        public static MongoClient client = new MongoClient();
+        
+        public static IMongoDatabase database = client.GetDatabase("battlesnake");
+
+        //public static Game game { get; set; }
 
         public static Random rnd = new Random();
 
@@ -65,7 +64,10 @@ namespace battlesnake_csharp.Controllers
         {
             "Is that the best you've got?",
             "Ha ha ha!",
-            "Moving here and there."
+            "Moving here and there.",
+            "Snaking around...",
+            "It's time to intertwine.",
+            "Slither OFF!"
         };
 
         [HttpGet]
@@ -79,14 +81,33 @@ namespace battlesnake_csharp.Controllers
         [Route("start")]
         public HttpResponseMessage start(object data)
         {
-            game = JsonConvert.DeserializeObject<Game>(data.ToString());
+            var start = JsonConvert.DeserializeObject<Start>(data.ToString());
+            //game = lcGame;
 
-            game.snake = "Stovepipe-C#";
+            var snake = "Stovepipe-C#";
+            //game.snake = snake;
 
-            var color = "#ffffff";
-            var taunt = string.Format("{0} crushes all opposition.", game.snake);
+            database.DropCollection("game");
+            var collection = database.GetCollection<BsonDocument>("game");
 
-            return Request.CreateResponse(HttpStatusCode.OK, new { name = game.snake, color = color, taunt = taunt });
+            var document = new BsonDocument
+            {
+                { "game_id" , start.game_id },
+                { "width", start.width },
+                { "height", start.height },
+                { "snake", snake },
+                { "topleftmovement", true }
+            };
+
+            collection.InsertOne(document);
+
+            
+
+            var color = "#" + getRandomHexColor();
+            var taunt = string.Format("{0} crushes all opposition.", snake);
+            var head_url = "https://battlesnake-oh-ps.herokuapp.com/static/img/default_head.png";
+
+            return Request.CreateResponse(HttpStatusCode.OK, new { name = snake, color = color, taunt = taunt, head_url = head_url });
         }
 
         [HttpPost]
@@ -95,11 +116,18 @@ namespace battlesnake_csharp.Controllers
         {
             var reqmove = JsonConvert.DeserializeObject<Move>(data.ToString());
 
-            if (reqmove.turn != null && game != null)
-                game.turn = reqmove.turn;
+            var collection = database.GetCollection<BsonDocument>("move");
 
+            var document = new BsonDocument
+            {
+                { "game_id" , reqmove.game_id },
+                { "turn" , reqmove.turn }
+            };
+
+            collection.InsertOne(document);
+           
             var move = GetMove(reqmove);
-            var taunt = taunts.ElementAt(rnd.Next(0, taunts.Count() - 1));
+            var taunt = taunts.ElementAt(rnd.Next(0, taunts.Count()));
 
             return Request.CreateResponse(HttpStatusCode.OK, new { move = move, taunt = taunt });
         }
@@ -118,6 +146,14 @@ namespace battlesnake_csharp.Controllers
 
         private string GetMove(Move reqmove)
         {
+            var collection = database.GetCollection<BsonDocument>("game");
+
+            var filter = Builders<BsonDocument>.Filter.Eq("game_id", reqmove.game_id);
+            var projection = Builders<BsonDocument>.Projection.Exclude("_id");
+            var document = collection.Find(filter).Project(projection).First();
+
+            var game = BsonSerializer.Deserialize<Game>(document);
+
             List<int> headPos = reqmove.snakes.Where(s => s.name == game.snake).First().coords.First();
 
             // Add all possible moves up, left, down, right
@@ -127,14 +163,25 @@ namespace battlesnake_csharp.Controllers
             possibleMoves.Add(new PossibleMove("down", new List<int> { headPos.First(), headPos.Last() + 1 }));
             possibleMoves.Add(new PossibleMove("right", new List<int> { headPos.First() + 1, headPos.Last() }));
 
+            UpdateDefinition<BsonDocument> update = null;
+
             if (headPos.First() == 0)
-                game.topleftMovement = false;
+            {
+                game.topleftmovement = false;
+                update = Builders<BsonDocument>.Update.Set("topleftmovement", false);
+            }
 
             if (headPos.First() == game.width - 1)
-                game.topleftMovement = true;
+            {
+                game.topleftmovement = true;
+                update = Builders<BsonDocument>.Update.Set("topleftmovement", true);
+            }
+            
+            if (update != null)
+                collection.UpdateOne(filter, update);
 
             // Change the moves to go bottom right
-            if (!game.topleftMovement)
+            if (!game.topleftmovement)
             {
                 var downRightOrder = new List<string> { "down", "right", "up", "left" };
                 possibleMoves = possibleMoves.OrderBy(pm => downRightOrder.IndexOf(pm.move)).ToList();
@@ -145,12 +192,22 @@ namespace battlesnake_csharp.Controllers
             reqmove.snakes.ForEach(s => occupiedAreas.AddRange(s.coords));
 
             // Remove any possible moves if they will be in an occupied area -- this doesnt prevent occupying a space that a snake will be going to
-            possibleMoves.RemoveAll(pm => occupiedAreas.Contains(pm.pos));
+            possibleMoves.RemoveAll(pm => occupiedAreas.Any(oa => oa.SequenceEqual(pm.pos)));
 
             // Remove any possible moves if they go out of bounds
             possibleMoves.RemoveAll(pm => pm.pos.First() < 0 || pm.pos.Last() < 0 || pm.pos.First() > (game.width - 1) || pm.pos.Last() > (game.height - 1));
 
             return possibleMoves.First().move;
+        }
+
+        private static string getRandomHexColor()
+        {
+            int value = rnd.Next(0, 16777216);
+            byte[] bytes = BitConverter.GetBytes(value);
+            Array.Reverse(bytes);
+            string hex = BitConverter.ToString(bytes);
+            hex = hex.Substring(3, hex.Length - 3).Replace("-", "");
+            return hex;
         }
     }
 }
