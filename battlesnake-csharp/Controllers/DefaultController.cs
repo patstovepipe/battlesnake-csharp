@@ -5,12 +5,13 @@ using System.Net;
 using System.Net.Http;
 using System.Web.Http;
 using System.Linq;
+using battlesnake_csharp.Models;
 
 namespace battlesnake_csharp.Controllers
 {
     public class DefaultController : ApiController
     {
-        public class Game : Start
+        private class Game : Start
         {
             public int? turn { get; set; }
 
@@ -25,14 +26,14 @@ namespace battlesnake_csharp.Controllers
             }
         }
 
-        public class Start
+        private class Start
         {
             public string game_id { get; set; }
             public int width { get; set; }
             public int height { get; set; }
         }
 
-        public class Move
+        private class Move
         {
             public List<List<int>> food { get; set; }
             public string game_id { get; set; }
@@ -41,13 +42,13 @@ namespace battlesnake_csharp.Controllers
             public int? turn { get; set; }
         }
 
-        public class BoardTile
+        private class BoardTile
         {
             public string state { get; set; }
             public string snake { get; set; }
         }
 
-        public class Snake
+        private class Snake
         {
             public string name { get; set; }
             public string state { get; set; }
@@ -57,19 +58,9 @@ namespace battlesnake_csharp.Controllers
             public string taunt { get; set; }
         }
 
-        public static List<Game> games = new List<Game>();
+        private static List<Game> games = new List<Game>();
 
-        public static Random rnd = new Random();
-
-        public static List<string> taunts = new List<string>()
-        {
-            "Is that the best you've got?",
-            "Ha ha ha!",
-            "Moving here and there.",
-            "Snaking around...",
-            "It's time to intertwine.",
-            "Slither OFF!"
-        };
+        private static Random rnd = new Random();
 
         [HttpGet]
         [Route("")]
@@ -86,7 +77,7 @@ namespace battlesnake_csharp.Controllers
 
             game.snake = "Stovepipe-C#";
 
-            var color = "#" + getRandomHexColor();
+            var color = "#" + GetRandomHexColor();
             var taunt = string.Format("{0} crushes all opposition.", game.snake);
 
             if (games.Exists(g => g.game_id == game.game_id))
@@ -108,7 +99,7 @@ namespace battlesnake_csharp.Controllers
                 game.turn = reqmove.turn;
 
             var move = GetMove(reqmove);
-            var taunt = taunts.ElementAt(rnd.Next(0, taunts.Count()));
+            var taunt = Taunt.GetTaunt(reqmove.turn);
 
             return Request.CreateResponse(HttpStatusCode.OK, new { move = move, taunt = taunt });
         }
@@ -125,7 +116,7 @@ namespace battlesnake_csharp.Controllers
             }
         }
 
-        private string GetMove(Move reqmove)
+        private static string GetMove(Move reqmove)
         {
             var game = games.Where(g => g.game_id == reqmove.game_id).FirstOrDefault();
             List<int> headPos = reqmove.snakes.Where(s => s.name == game.snake).First().coords.First();
@@ -163,7 +154,7 @@ namespace battlesnake_csharp.Controllers
             return possibleMoves.First().move;
         }
 
-        private static string getRandomHexColor()
+        private static string GetRandomHexColor()
         {
             int value = rnd.Next(0, 16777216);
             byte[] bytes = BitConverter.GetBytes(value);
