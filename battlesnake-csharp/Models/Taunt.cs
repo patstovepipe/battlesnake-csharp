@@ -74,7 +74,7 @@ namespace battlesnake_csharp.Models
             else
                 taunt = tauntLine.Substring(turn, marqueeLength);
 
-            Logger.Log(string.Format("{0} {1} {2}", reqmoveTurn, turn, taunt));
+            Logger.Log("taunt", string.Format("{0} {1} {2}", reqmoveTurn, turn, taunt));
             return taunt;
         }
     }

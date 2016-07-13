@@ -10,9 +10,9 @@ namespace battlesnake_csharp.Common
     {
         private static string logFile = System.AppDomain.CurrentDomain.BaseDirectory + "log.txt";
 
-        public static void Log(string message)
+        public static void Log(string tag, string message)
         {
-            string logMessage = string.Format("{0}: {1}", DateTime.Now, message);
+            string logMessage = string.Format("{0}: {1}: {2}", DateTime.Now, tag, message);
             File.AppendAllText(logFile, logMessage + Environment.NewLine);
         }
     }
